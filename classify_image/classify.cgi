@@ -9,6 +9,7 @@ import tempfile
 import os
 import json
 import urllib.request
+from urllib.error import URLError
 
 import time
 timestamp = lambda: int(round(time.time() * 1000))
@@ -20,26 +21,17 @@ import cgi
 cgitb.enable()
 
 CLASSIFY_DIMENSION = 299
+CLASSIFY_ENDPOINT = 'http://192.168.56.102:8000/'
+CLASSIFY_FORMATS = ('image/jpeg', 'image/png', 'image/webp')
 
 def md5digest(raw):
     m = md5()
     m.update(raw)
     return m.hexdigest()
 
-def classify():
-    
-    fs = cgi.FieldStorage()
-    
-    # Validate data
-    json_response['input']['fs_type'] = fs.type
-    json_response['input']['fs_headers'] = fs.headers
-    if 'userfile' not in fs: return 0
-    len = int(fs.headers['content-length'])
-    if len > 4*1048576: return 0
-    fileitem = fs['userfile']
-    if not fileitem.file: return 0
-    
-    data = fileitem.file.read()
+
+def saveFileAndClassify(fileobj):
+    data = fileobj.read()
     fname = md5digest(data) + '.jpg'
 
     # Load as opencv image object
@@ -74,18 +66,61 @@ def classify():
     cv2.imwrite(outpath, resized_image)
     json_response['input']['file_name'] = outpath
 
-    with urllib.request.urlopen('http://192.168.56.102:8000/'+fname) as response:
-      json_response['response'] = json.loads(response.read().decode('utf-8'))
+    try:
+      with urllib.request.urlopen(CLASSIFY_ENDPOINT+fname) as response:
+        return json.loads(response.read().decode('utf-8'))
+    except (ConnectionRefusedError, URLError) as e:
+      return "Service endpoint {2} not responding... ({0}): {1}".format(e.errno, e.strerror, CLASSIFY_ENDPOINT)
+
+    return "Unexpected classify error"
+
+
+def classify():
+    
+    fs = cgi.FieldStorage()
+    
+    len = int(fs.headers['content-length'])
+    if len > 4*1048576:
+        json_response['header']['err_no'] = 400
+        json_response['header']['err_msg'] = 'Data too long'
+        return 0
+
+    json_response['header']['err_no'] = 400
+    json_response['header']['err_msg'] = 'No JPEG file in form-data'
+    json_response['input']['fs_type'] = fs.type
+    json_response['input']['fs_headers'] = fs.headers
+    json_response['input']['files'] = []
+    json_response['debug']['fieldstorage'] = []
+    results = []
+
+    if fs.list:
+        json_response['header']['err_no'] = 400
+        json_response['header']['err_msg'] = 'Multi-files'
+        for item in fs.list:
+            if item.file and item.type in CLASSIFY_FORMATS:
+                json_response['input']['files'].append( (item.type, item.filename) )
+                #json_response['debug']['fieldstorage'].append(item)
+                results.append( saveFileAndClassify(item.file) )
+                json_response['header']['err_no'] = 0
+                json_response['header']['err_msg'] = 'Success'
+    
+    json_response['response'] = results
 
 
 print("Content-Type: application/json;charset=utf-8")
 print() # End of HTTP response headers
 
 json_response = {
+    'header' : {
+        'api' : 'image_classify_wrapped',
+        'date' : '2018-01-09',
+        'err_no' : 500,
+        'err_msg' : 'Unexpected server error'
+    },
     'env' : {},
     'input' : {},
     'profiling' : {},
-    'predictions' : [],
+    'debug' : {},
 }
 json_response['env']['encoding'] = sys.stdout.encoding
 json_response['env']['opencv'] = cv2.__version__

@@ -18,7 +18,7 @@ import socketserver
 import json
 
 TOP_PREDICTIONS = 5
-MODEL_DIR = '/tmp/imagenet'
+MODEL_DIR = './imagenet'
 
 class NodeLookup(object):
   """Converts integer node ID's to human readable labels."""
@@ -150,7 +150,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         json_response = {
             'header' : {
                 'api' : 'image_classify',
-                'date' : '2018-01-08'
+                'date' : '2018-01-08',
+                'err_no' : 500,
+                'err_msg' : 'Unexpected server error'
             },
             'image_classify' : {
                 'model' : 'inception v3 pre-trained',
@@ -165,9 +167,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         json_response['image_classify']['input_file'] = inpath
         if os.path.exists(inpath):
             json_response['image_classify']['predicts'] = run_inference_on_image(inpath)
+            json_response['header']['err_no'] = 0
+            json_response['header']['err_msg'] = 'Success'
         else:
-            json_response['header']['error_code'] = 404
-            json_response['header']['error_msg'] = 'file not found'
+            json_response['header']['err_no'] = 404
+            json_response['header']['err_msg'] = 'File not found'
         self.wfile.write(bytes(json.dumps(json_response), "utf8"))
         return
 
