@@ -14,10 +14,12 @@ import sys
 
 import http.server
 import socketserver
+import urllib.request
 
 import json
 
 TOP_PREDICTIONS = 5
+CLASSIFY_MAXLEN = 1058476
 MODEL_DIR = './imagenet'
 
 class NodeLookup(object):
@@ -95,7 +97,7 @@ def create_graph():
     _ = tf.import_graph_def(graph_def, name='')
 
 
-def run_inference_on_image(image):
+def run_inference_on_image(image_data):
   """Runs inference on an image.
 
   Args:
@@ -104,8 +106,6 @@ def run_inference_on_image(image):
   Returns:
     Nothing
   """
-
-  image_data = tf.gfile.FastGFile(image, 'rb').read()
 
   with tf.Session() as sess:
     # Some useful tensors:
@@ -139,6 +139,55 @@ def run_inference_on_image(image):
 PORT = 8000
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+
+    def do_POST(self):
+        self.send_response(200)
+        self.send_header('Content-type',
+                         'application/json;charset=utf-8')
+        self.end_headers()
+
+        length = int(self.headers['Content-Length'])
+        dtype = self.headers['Arobot-Data-Type']
+        rid = self.headers['Arobot-Request-Id']
+        json_response = {
+            'header' : {
+                'api' : 'image_classify',
+                'date_changed' : '2018-01-10',
+                'request_id' : rid,
+                'request_data_type' : dtype,
+                'err_no' : 500,
+                'err_msg' : 'Unexpected server error'
+            },
+            'image_classify' : {
+                'model' : 'inception v3 pre-trained',
+                'transfer_learn' : 'none',
+            },
+        }
+        if length > CLASSIFY_MAXLEN:
+          json_response['header']['err_no'] = 400
+          json_response['header']['err_msg'] = 'Image data too large (max '+str(CLASSIFY_MAXLEN)+' bytes)'
+          return
+
+        if dtype=='url':
+          url = self.rfile.read(length).decode('utf-8')
+          with urllib.request.urlopen(url) as img:
+            img_data = img.read()
+            #image_data = tf.gfile.FastGFile(url, 'rb').read()
+            json_response['image_classify']['url'] = url
+            json_response['image_classify']['predicts'] = run_inference_on_image(img_data)
+            json_response['header']['err_no'] = 0
+            json_response['header']['err_msg'] = 'Success'
+        elif dtype=='bin':
+          json_response['image_classify']['predicts'] = run_inference_on_image(self.rfile.read(length))
+          json_response['header']['err_no'] = 0
+          json_response['header']['err_msg'] = 'Success'
+          pass
+        else:
+          json_response['header']['err_no'] = 400
+          json_response['header']['err_msg'] = 'Unsupported data type'
+          pass
+
+        self.wfile.write(bytes(json.dumps(json_response), "utf8"))
 
     def do_GET(self):
         # Construct a server response.

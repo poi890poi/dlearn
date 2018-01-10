@@ -1,0 +1,3 @@
+/models/
+/classify_image/imagenet/
+*.pyc
