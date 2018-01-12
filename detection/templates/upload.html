@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
     <head>
     </head>
@@ -58,7 +59,7 @@
                                 var objects = detection.objects;
                                 var htmlstr = '';
                                 for ( var j=0; j<objects.length; j++ ) {
-                                    htmlstr = htmlstr + objects[j] + '<br />';
+                                    htmlstr = htmlstr + objects[j].label + '<br />';
                                 }
                                 cell2.html(htmlstr);
                                 //console.log($("#table_results").find("tr")[0].find("td"));

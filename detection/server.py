@@ -22,6 +22,7 @@ IMAGE_DIR_MAPPED = 'http://192.168.56.102/images/detection/'
 #YOLO_WEIGHTS = './bin/tiny-yolo-voc.weights'
 YOLO_CONFIG = './cfg/yolo.cfg'
 YOLO_WEIGHTS = './bin/yolo.weights'
+YOLO_THRESHOLD = 0.5
 
 COLORS = [
     (255,0,0), (128,0,128), (255,0,255),
@@ -56,7 +57,8 @@ def run_inference_on_image(image_data, outpath = ''):
     cindex = 0
     jsonresult = []
     for item in result:
-        cv2.rectangle(imgcv, (item['topleft']['x'],item['topleft']['y']), (item['bottomright']['x'],item['bottomright']['y']), COLORS[cindex], 3)
+        cv2.putText(imgcv, item['label'], (item['topleft']['x']+3,item['bottomright']['y']-3), cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[cindex], 1) 
+        cv2.rectangle(imgcv, (item['topleft']['x'],item['topleft']['y']), (item['bottomright']['x'],item['bottomright']['y']), COLORS[cindex], 2)
         jsonresult.append({
             'label': item['label'],
             'confidence': str(item['confidence']),
