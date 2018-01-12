@@ -14,4 +14,4 @@ print()
 
 with open('./templates/upload.html', 'r') as tfile:
     tpage = Template(tfile.read())
-    print(tpage.safe_substitute(action='/cgi-bin/detection/detect.cgi'))
+    print(tpage.safe_substitute(action='http://192.168.56.102:8000'))
