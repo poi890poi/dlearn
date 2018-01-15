@@ -1,3 +1,11 @@
 /models/
 /classify_image/imagenet/
+/classify_image/retrained/
+/detection/bin/
+/detection/cfg/
+/detection/imagenet/
+/coco/
+
 *.pyc
+*.swp
+

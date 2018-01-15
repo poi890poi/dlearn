@@ -3,6 +3,10 @@ import cv2
 
 import tensorflow as tf, sys
 
+import face_recognition
+
+from abc import ABC, abstractmethod
+ 
 import http.server
 import socketserver
 import urllib.request
@@ -74,83 +78,29 @@ def resize_n_pad( fileobj, dimension ):
     return resized_image
 
 
-class IntelligentModels():
+class Singleton(type):
+    _instances = {}
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
+    
 
-    mYolo = None
-    mInceptionV3 = None
+class Darkflow(metaclass=Singleton):
 
-    OPTIONS = {
-        'inceptionv3' : {
-            'pre-trained' : {
-                'graph' : '/usr/lib/cgi-bin/classify_image/imagenet/classify_image_graph_def.pb',
-                'output' : 'softmax:0',
-                'label' : '/usr/lib/cgi-bin/classify_image/imagenet/imagenet_labels_sorted.txt',
-            },
-            'flowers' : {
-                'graph' : '/usr/lib/cgi-bin/classify_image/retrained/flowers/retrained_graph.pb',
-                'output' : 'final_result:0',
-                'label' : '/usr/lib/cgi-bin/classify_image/retrained/flowers/retrained_labels.txt',
-            },
-        }
-    }
+    mTFNet = None
 
+    def __init__(self):
+        #YOLO_CONFIG = './cfg/tiny-yolo-voc.cfg'
+        #YOLO_WEIGHTS = './bin/tiny-yolo-voc.weights'
+        options = {"model": './cfg/yolo.cfg', "load": './bin/yolo.weights', "threshold": 0.5}
+        self.mTFNet = TFNet(options)
+        print('Yolo object detector initialized')
+        print()
 
-    def detect(self, imgcv, service):
-        if service=='/detection/yolo':
-            return self.yolo(imgcv)
-        elif service=='/classify/inceptionv3':
-            return self.inceptionv3(imgcv)
+    def detect(self, imgcv):
 
-
-    def inceptionv3(self, imgcv):
-        if not self.mInceptionV3:
-            # Unpersists graph from file
-            gpath = self.OPTIONS['inceptionv3']['pre-trained']['graph']
-            with tf.gfile.FastGFile(gpath, 'rb') as f:
-                graph_def = tf.GraphDef()
-                graph_def.ParseFromString(f.read())
-                _ = tf.import_graph_def(graph_def, name='')
-
-        with tf.Session() as sess:
-            # Loads label file, strips off carriage return
-            lpath = self.OPTIONS['inceptionv3']['pre-trained']['label']
-            label_lines = [line.rstrip() for line 
-                            in tf.gfile.GFile(lpath)]
-
-            # Feed the image_data as input to the graph and get first prediction
-            tname = self.OPTIONS['inceptionv3']['pre-trained']['output']
-            softmax_tensor = sess.graph.get_tensor_by_name(tname)
-            
-            # Read in the image_data
-            #image_data = tf.gfile.FastGFile('/var/www/html/images/detection/ff8254fba9170f90652b87fcf1604a75.jpg', 'rb').read()
-            image_data = cv2.imencode('.jpg', imgcv)
-            predictions = sess.run(softmax_tensor, {'DecodeJpeg/contents:0': image_data[1].tostring()})
-            
-            # Sort to show labels of first prediction in order of confidence
-            top_k = predictions[0].argsort()[-5:][::-1]
-            
-            jsonresult = []
-            for node_id in top_k:
-                human_string = label_lines[node_id]
-                score = predictions[0][node_id]
-                jsonresult.append({
-                    'label' : human_string,
-                    'score' : ' %.5f' % (score)
-                })
-
-            return jsonresult
-
-
-    def yolo(self, imgcv):
-        if not self.mYolo:
-            #YOLO_CONFIG = './cfg/tiny-yolo-voc.cfg'
-            #YOLO_WEIGHTS = './bin/tiny-yolo-voc.weights'
-            options = {"model": './cfg/yolo.cfg', "load": './bin/yolo.weights', "threshold": 0.5}
-            self.mYolo = TFNet(options)
-            print('Yolo detector initialized')
-            print()
-
-        result = self.mYolo.return_predict(imgcv)
+        result = self.mTFNet.return_predict(imgcv)
 
         height, width, channels = imgcv.shape
         cindex = 0
@@ -172,7 +122,71 @@ class IntelligentModels():
         return jsonresult
 
 
-IMODELS = IntelligentModels()
+class InceptionV3(metaclass=Singleton):
+
+    OPTIONS = {
+        'inceptionv3' : {
+            'pre-trained' : {
+                'graph' : '/usr/lib/cgi-bin/classify_image/imagenet/classify_image_graph_def.pb',
+                'output' : 'softmax:0',
+                'label' : '/usr/lib/cgi-bin/classify_image/imagenet/imagenet_labels_sorted.txt',
+            },
+            'flowers' : {
+                'graph' : '/usr/lib/cgi-bin/classify_image/retrained/flowers/retrained_graph.pb',
+                'output' : 'final_result:0',
+                'label' : '/usr/lib/cgi-bin/classify_image/retrained/flowers/retrained_labels.txt',
+            },
+        }
+    }
+
+    def __init__(self):
+        # Unpersists graph from file
+        gpath = self.OPTIONS['inceptionv3']['pre-trained']['graph']
+        with tf.gfile.FastGFile(gpath, 'rb') as f:
+            graph_def = tf.GraphDef()
+            graph_def.ParseFromString(f.read())
+            _ = tf.import_graph_def(graph_def, name='')
+        print('InceptionV3 classifier initialized')
+        print()
+
+    def detect(self, imgcv):
+        with tf.Session() as sess:
+            # Loads label file, strips off carriage return
+            now = -timestamp()
+            lpath = self.OPTIONS['inceptionv3']['pre-trained']['label']
+            label_lines = [line.rstrip() for line 
+                            in tf.gfile.GFile(lpath)]
+            print( 'load labels', now + timestamp() )
+
+            # Feed the image_data as input to the graph and get first prediction
+            now = -timestamp()
+            tname = self.OPTIONS['inceptionv3']['pre-trained']['output']
+            softmax_tensor = sess.graph.get_tensor_by_name(tname)
+            print( 'get_tensor_by_name', now + timestamp() )
+            
+            # Read in the image_data
+            #image_data = tf.gfile.FastGFile('/var/www/html/images/detection/ff8254fba9170f90652b87fcf1604a75.jpg', 'rb').read()
+            now = -timestamp()
+            image_data = cv2.imencode('.jpg', imgcv)
+            print( 'imencode', now + timestamp() )
+            now = -timestamp()
+            predictions = sess.run(softmax_tensor, {'DecodeJpeg/contents:0': image_data[1].tostring()})
+            print( 'sess.run', now + timestamp() )
+            
+            # Sort to show labels of first prediction in order of confidence
+            top_k = predictions[0].argsort()[-5:][::-1]
+            
+            jsonresult = []
+            for node_id in top_k:
+                human_string = label_lines[node_id]
+                score = predictions[0][node_id]
+                jsonresult.append({
+                    'label' : human_string,
+                    'score' : ' %.5f' % (score)
+                })
+
+            return jsonresult
+
 
 class Handler(http.server.SimpleHTTPRequestHandler):
 
@@ -222,7 +236,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         # Handling a file
                         now = timestamp()
                         imgcv = resize_n_pad(item.file, 416) # Request with image url
-                        results = IMODELS.detect(imgcv, self.path)
+
+                        if self.path=='/detection/yolo':
+                            results = Darkflow().detect(imgcv)
+                        elif self.path=='/classify/inceptionv3':
+                            results = InceptionV3().detect(imgcv)
+                        elif self.path=='/classify/darknet19':
+                            pass
+
                         json_response['result']['annotations'] = results
                         json_response['result']['rid'] = item.name
 
