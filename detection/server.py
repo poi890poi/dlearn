@@ -7,9 +7,11 @@ import face_recognition
 
 from abc import ABC, abstractmethod
  
-import http.server
-import socketserver
+from socketserver import ThreadingMixIn
+from http.server import SimpleHTTPRequestHandler, HTTPServer
 import urllib.request
+import threading
+
 
 import json
 import numpy as np
@@ -208,18 +210,22 @@ class InceptionV3(metaclass=Singleton):
         }
     }
 
+    mGraph = tf.Graph()
+
     def __init__(self):
         # Unpersists graph from file
         gpath = self.OPTIONS['inceptionv3']['pre-trained']['graph']
         with tf.gfile.FastGFile(gpath, 'rb') as f:
             graph_def = tf.GraphDef()
             graph_def.ParseFromString(f.read())
-            _ = tf.import_graph_def(graph_def, name='')
+            with self.mGraph.as_default():
+                _ = tf.import_graph_def(graph_def, name='')
+        tf.reset_default_graph()
         print('InceptionV3 classifier initialized')
         print()
 
     def detect(self, imgcv):
-        with tf.Session() as sess:
+        with tf.Session(graph=self.mGraph) as sess:
             # Loads label file, strips off carriage return
             now = -timestamp()
             lpath = self.OPTIONS['inceptionv3']['pre-trained']['label']
@@ -257,13 +263,30 @@ class InceptionV3(metaclass=Singleton):
             return jsonresult
 
 
-class Handler(http.server.SimpleHTTPRequestHandler):
+    def writeGraphVisualize(self):
+        with tf.Session(graph=self.mGraph) as sess:
+            # `sess.graph` provides access to the graph used in a `tf.Session`.
+            writer = tf.summary.FileWriter("/tmp/log/...", sess.graph)
+            writer.close()
+
+
+class ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
+    pass
+
+
+class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
+        print('something...')
         self.send_response(200)
         self.send_header('Content-type', 'text/plain;charset=utf-8')
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.wfile.write(bytes('', "utf8"))
+        self.end_headers()
+
+        if self.path == '/tfgraph':
+            pass
+
+        self.wfile.write(bytes(self.path, "utf8"))
 
 
     def do_POST(self):
@@ -335,10 +358,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(bytes(json.dumps(json_response), "utf8"))
 
 
-socketserver.TCPServer.allow_reuse_address = True
-httpd = socketserver.TCPServer(("", PORT), Handler)
-print("serving at port", PORT)
+server = ThreadingSimpleServer(('', PORT), Handler)
+print("Serving HTTP traffic using port", PORT)
 try:
-    httpd.serve_forever()
+    while 1:
+        sys.stdout.flush()
+        server.handle_request()
 except KeyboardInterrupt:
-    print("releasing port", PORT)
+    print("\nShutting down server per users request.")
