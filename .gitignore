@@ -4,6 +4,7 @@
 /detection/bin/
 /detection/cfg/
 /detection/imagenet/
+/detection/known_faces/
 /coco/
 
 *.pyc

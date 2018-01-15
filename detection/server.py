@@ -86,6 +86,75 @@ class Singleton(type):
         return cls._instances[cls]
     
 
+class FaceRecognition(metaclass=Singleton):
+
+    DIR_KNOWN_FACES = './known_faces'
+    mFaceNames = []
+    mFaceEncodings = []
+
+    def __init__(self):
+        print(self.DIR_KNOWN_FACES)
+        directory = os.fsencode(self.DIR_KNOWN_FACES)
+        for file in os.listdir(directory):
+            filename = os.fsdecode(file)
+            if filename.endswith(".jpg"):
+                facename = os.path.splitext(filename)[0]
+                encpath = os.path.join(self.DIR_KNOWN_FACES, facename + '.npy')
+
+                imgpath = os.path.join(self.DIR_KNOWN_FACES, filename)
+                image = face_recognition.load_image_file(imgpath)
+                face_encodings = face_recognition.api.face_encodings(image, num_jitters=1)
+
+                if len(face_encodings) > 1:
+                    print('Image of known faces should NOT contain more than one face: ' + facename)
+                self.mFaceNames.append(facename)
+                self.mFaceEncodings.append(face_encodings[0])
+                np.save(encpath, face_encodings[0])
+                continue
+            else:
+                continue
+        print('Face recognition initialized')
+        print()
+
+    def detect(self, imgcv):
+
+        fname = str(uuid.uuid4())+'.jpg'
+        imgpath = os.path.join( IMAGE_DIR_LOCAL, fname )
+        cv2.imwrite(imgpath, imgcv)
+
+        image = face_recognition.load_image_file(imgpath)
+        face_locations = face_recognition.face_locations(image, model="hog")
+
+        cindex = 0
+        jsonresult = []
+        for face in face_locations:
+            cv2.rectangle(imgcv, (face[1], face[0]), (face[3], face[2]), COLORS[cindex], 2)
+            cindex += 1
+            if cindex > 15: cindex = 0
+
+            jsonresult.append({
+                'label': 'face',
+                'confidence': '0',
+                'topleft': (face[1], face[0]),
+                'bottomright': (face[3], face[2]),
+            })
+
+        face_encodings = face_recognition.api.face_encodings(image, face_locations, num_jitters=1)
+        fi = 0
+        for face in face_encodings:
+            compare = face_recognition.api.compare_faces(self.mFaceEncodings, face, tolerance=0.6)
+            facename = 'unknown'
+            for i in range(len(self.mFaceEncodings)):
+                if compare[i]:
+                    facename = self.mFaceNames[i]
+                    break
+            jsonresult[fi]['label'] = facename
+            fi += 1
+            print(compare)
+
+        return jsonresult
+
+
 class Darkflow(metaclass=Singleton):
 
     mTFNet = None
@@ -107,8 +176,10 @@ class Darkflow(metaclass=Singleton):
         jsonresult = []
         for item in result:
             # Draw preview
-            cv2.putText(imgcv, item['label'], (item['topleft']['x']+3,item['bottomright']['y']-3), cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[cindex], 1) 
-            cv2.rectangle(imgcv, (item['topleft']['x'],item['topleft']['y']), (item['bottomright']['x'],item['bottomright']['y']), COLORS[cindex], 2)
+            cv2.putText(imgcv, item['label'], (item['topleft']['x']+3, item['bottomright']['y']-3), cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[cindex], 1) 
+            cv2.rectangle(imgcv, (item['topleft']['x'], item['topleft']['y']), (item['bottomright']['x'], item['bottomright']['y']), COLORS[cindex], 2)
+            cindex += 1
+            if cindex > 15: cindex = 0
 
             jsonresult.append({
                 'label': item['label'],
@@ -116,8 +187,6 @@ class Darkflow(metaclass=Singleton):
                 'topleft': (item['topleft']['x'], item['topleft']['y']),
                 'bottomright': (item['bottomright']['x'], item['bottomright']['y']),
             })
-            cindex += 1
-            if cindex > 15: cindex = 0
 
         return jsonresult
 
@@ -243,6 +312,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             results = InceptionV3().detect(imgcv)
                         elif self.path=='/classify/darknet19':
                             pass
+                        elif self.path=='/face/detect':
+                            results = FaceRecognition().detect(imgcv)
 
                         json_response['result']['annotations'] = results
                         json_response['result']['rid'] = item.name
