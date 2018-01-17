@@ -101,7 +101,7 @@ class Singleton(type):
 
 class FaceRecognition(metaclass=Singleton):
 
-    DIR_KNOWN_FACES = './known_faces'
+    DIR_KNOWN_FACES = os.path.join(os.environ['MODEL_DIR'], 'face_recognition/known')
     mFaceNames = []
     mFaceEncodings = []
 
@@ -175,9 +175,11 @@ class Darkflow(metaclass=Singleton):
     mTFNet = None
 
     def __init__(self):
-        #YOLO_CONFIG = './cfg/tiny-yolo-voc.cfg'
-        #YOLO_WEIGHTS = './bin/tiny-yolo-voc.weights'
-        options = {"model": './cfg/yolo.cfg', "load": './bin/yolo.weights', "threshold": 0.5}
+        options = {
+            "model" : os.path.join(os.environ['MODEL_DIR'], 'darknet/cfg/yolo.cfg'),
+            "load" : os.path.join(os.environ['MODEL_DIR'], 'darknet/bin/yolo.weights'),
+            "threshold": 0.5
+        }
         self.mTFNet = TFNet(options)
         print('Yolo object detector initialized')
         print()
@@ -224,14 +226,14 @@ class InceptionV3(metaclass=Singleton):
     OPTIONS = {
         'inceptionv3' : {
             'pre-trained' : {
-                'graph' : '/usr/lib/cgi-bin/classify_image/imagenet/classify_image_graph_def.pb',
+                'graph' : os.path.join(os.environ['MODEL_DIR'], 'inceptionv3/imagenet/classify_image_graph_def.pb'),
+                'label' : os.path.join(os.environ['MODEL_DIR'], 'inceptionv3/imagenet/imagenet_labels_sorted.txt'),
                 'output' : 'softmax:0',
-                'label' : '/usr/lib/cgi-bin/classify_image/imagenet/imagenet_labels_sorted.txt',
             },
             'flowers' : {
-                'graph' : '/usr/lib/cgi-bin/classify_image/retrained/flowers/retrained_graph.pb',
-                'output' : 'final_result:0',
-                'label' : '/usr/lib/cgi-bin/classify_image/retrained/flowers/retrained_labels.txt',
+                'graph' : os.path.join(os.environ['MODEL_DIR'], 'inceptionv3/retrained/retrained_graph.pb'),
+                'label' : os.path.join(os.environ['MODEL_DIR'], 'inceptionv3/retrained/retrained_labels.txt'),
+                'output' : 'softmax:0',
             },
         }
     }

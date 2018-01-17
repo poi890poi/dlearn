@@ -1,11 +1,8 @@
-/models/
-/classify_image/imagenet/
-/classify_image/retrained/
-/detection/bin/
-/detection/cfg/
-/detection/imagenet/
-/detection/known_faces/
-/coco/
+/models
+/classify_image/imagenet
+/classify_image/retrained
+/detection/models
+/coco
 
 *.pyc
 *.swp
