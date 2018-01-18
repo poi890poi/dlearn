@@ -325,7 +325,7 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path == '/tfgraph':
             pass
 
-        self.wfile.write(bytes(self.path, "utf8"))
+        self.wfile.write(bytes('Arobot Imaging Services Server is running', "utf8"))
 
     def do_POST(self):
 
